@@ -48,6 +48,7 @@ from modules.nexlog_liberar import NexlogLiberar
 from modules.outlook import OutlookWeb
 from modules.sefaz import SefazConsulta
 from modules.telegram_bot import TelegramBot
+from modules.uncleared import limpar_awbs, carregar_planilha_sistema, comparar_awbs, salvar_resultado, salvar_comparacao
 
 # ========= CUSTOMTKINTER CONFIG =========
 ctk.set_appearance_mode("dark")
@@ -186,6 +187,10 @@ class AppAutomacao:
         # --- ABA LOG ---
         self.tabview.add("Log")
         self._criar_aba_log(self.tabview.tab("Log"))
+
+        # --- ABA UNCLEARED ---
+        self.tabview.add("Uncleared")
+        self._criar_aba_uncleared(self.tabview.tab("Uncleared"))
 
     def _criar_aba_voos(self, parent):
         """Aba principal com busca de voos, checkboxes e painel de progresso."""
@@ -744,6 +749,323 @@ class AppAutomacao:
             relief="flat", borderwidth=0
         )
         self.log_widget.pack(fill="both", expand=True, padx=8, pady=8)
+
+    # ========= ABA UNCLEARED =========
+
+    def _criar_aba_uncleared(self, parent):
+        """Aba Uncleared: limpeza, deduplicacao e comparacao de AWBs."""
+        from tkinter import filedialog
+
+        # Estado da aba
+        self._uncleared_awbs_limpos: List[str] = []
+        self._uncleared_awbs_planilha: set = set()
+        self._uncleared_resultado_comparacao: dict = {}
+        self._uncleared_arquivo_planilha: str = ""
+
+        # --- Layout principal: dois paineis lado a lado ---
+        main_frame = ctk.CTkFrame(parent, fg_color="transparent")
+        main_frame.pack(fill="both", expand=True, padx=8, pady=8)
+
+        # Painel esquerdo: Input (colar AWBs)
+        left_frame = ctk.CTkFrame(main_frame, corner_radius=8)
+        left_frame.pack(side="left", fill="both", expand=True, padx=(0, 4))
+
+        # Header esquerdo
+        left_header = ctk.CTkFrame(left_frame, fg_color="transparent")
+        left_header.pack(fill="x", padx=12, pady=(12, 6))
+
+        ctk.CTkLabel(left_header, text="AWBs para limpar",
+                     font=ctk.CTkFont(size=13, weight="bold")).pack(side="left")
+
+        self._uncleared_lbl_count_input = ctk.CTkLabel(
+            left_header, text="0 AWBs",
+            font=ctk.CTkFont(size=11), text_color="#6b7280")
+        self._uncleared_lbl_count_input.pack(side="right")
+
+        # Caixa de texto para colar AWBs
+        self._uncleared_input_text = ctk.CTkTextbox(
+            left_frame, corner_radius=6,
+            font=ctk.CTkFont(family="Consolas", size=11),
+            wrap="none")
+        self._uncleared_input_text.pack(fill="both", expand=True, padx=12, pady=(0, 8))
+
+        # Botoes de acao
+        left_btns = ctk.CTkFrame(left_frame, fg_color="transparent")
+        left_btns.pack(fill="x", padx=12, pady=(0, 12))
+
+        ctk.CTkButton(left_btns, text="LIMPAR E DEDUPLICAR",
+                      command=self._uncleared_processar,
+                      width=180, height=34,
+                      fg_color="#22c55e", hover_color="#16a34a",
+                      text_color="#000000",
+                      font=ctk.CTkFont(size=12, weight="bold")).pack(side="left")
+
+        ctk.CTkButton(left_btns, text="Limpar campo",
+                      command=self._uncleared_limpar_input,
+                      width=100, height=34,
+                      fg_color="transparent", border_width=1,
+                      text_color="#ef4444",
+                      font=ctk.CTkFont(size=11)).pack(side="right")
+
+        # Painel direito: Resultado + Comparacao
+        right_frame = ctk.CTkFrame(main_frame, corner_radius=8)
+        right_frame.pack(side="right", fill="both", expand=True, padx=(4, 0))
+
+        # Header direito
+        right_header = ctk.CTkFrame(right_frame, fg_color="transparent")
+        right_header.pack(fill="x", padx=12, pady=(12, 6))
+
+        ctk.CTkLabel(right_header, text="Resultado",
+                     font=ctk.CTkFont(size=13, weight="bold")).pack(side="left")
+
+        self._uncleared_lbl_count_result = ctk.CTkLabel(
+            right_header, text="",
+            font=ctk.CTkFont(size=11), text_color="#22c55e")
+        self._uncleared_lbl_count_result.pack(side="right")
+
+        # Caixa de texto resultado (somente leitura visual)
+        self._uncleared_result_text = ctk.CTkTextbox(
+            right_frame, corner_radius=6,
+            font=ctk.CTkFont(family="Consolas", size=11),
+            wrap="none")
+        self._uncleared_result_text.pack(fill="both", expand=True, padx=12, pady=(0, 8))
+
+        # --- Secao de Comparacao ---
+        compare_frame = ctk.CTkFrame(right_frame, corner_radius=6)
+        compare_frame.pack(fill="x", padx=12, pady=(0, 12))
+
+        compare_inner = ctk.CTkFrame(compare_frame, fg_color="transparent")
+        compare_inner.pack(fill="x", padx=12, pady=10)
+
+        ctk.CTkLabel(compare_inner, text="Comparar com planilha:",
+                     font=ctk.CTkFont(size=11),
+                     text_color="#9ca3af").pack(side="left")
+
+        ctk.CTkButton(compare_inner, text="Importar .xlsx/.csv",
+                      command=self._uncleared_importar_planilha,
+                      width=140, height=28,
+                      font=ctk.CTkFont(size=11)).pack(side="left", padx=(10, 0))
+
+        ctk.CTkButton(compare_inner, text="COMPARAR",
+                      command=self._uncleared_comparar,
+                      width=100, height=28,
+                      fg_color="#3b82f6", hover_color="#2563eb",
+                      font=ctk.CTkFont(size=11, weight="bold")).pack(side="left", padx=(10, 0))
+
+        self._uncleared_lbl_planilha = ctk.CTkLabel(
+            compare_inner, text="Nenhuma planilha",
+            font=ctk.CTkFont(size=10), text_color="#6b7280")
+        self._uncleared_lbl_planilha.pack(side="right")
+
+        # Botoes de salvar (abaixo da comparacao)
+        save_frame = ctk.CTkFrame(right_frame, fg_color="transparent")
+        save_frame.pack(fill="x", padx=12, pady=(0, 12))
+
+        ctk.CTkButton(save_frame, text="Copiar resultado",
+                      command=self._uncleared_copiar_resultado,
+                      width=120, height=28,
+                      fg_color="transparent", border_width=1,
+                      text_color="#60a5fa",
+                      font=ctk.CTkFont(size=11)).pack(side="left")
+
+        ctk.CTkButton(save_frame, text="Salvar .xlsx",
+                      command=self._uncleared_salvar_xlsx,
+                      width=100, height=28,
+                      fg_color="transparent", border_width=1,
+                      text_color="#60a5fa",
+                      font=ctk.CTkFont(size=11)).pack(side="left", padx=(8, 0))
+
+        ctk.CTkButton(save_frame, text="Salvar comparacao",
+                      command=self._uncleared_salvar_comparacao,
+                      width=130, height=28,
+                      fg_color="transparent", border_width=1,
+                      text_color="#60a5fa",
+                      font=ctk.CTkFont(size=11)).pack(side="left", padx=(8, 0))
+
+    def _uncleared_processar(self):
+        """Processa AWBs: limpa (11 digitos) e remove duplicados."""
+        texto = self._uncleared_input_text.get("1.0", tk.END)
+
+        if not texto.strip():
+            messagebox.showwarning("Aviso", "Cole os AWBs no campo da esquerda.")
+            return
+
+        awbs_unicos, awbs_todos, duplicados = limpar_awbs(texto)
+
+        if not awbs_unicos:
+            messagebox.showwarning("Aviso",
+                "Nenhum AWB valido encontrado.\n"
+                "AWBs devem comecar com 127 e ter pelo menos 11 digitos.")
+            return
+
+        self._uncleared_awbs_limpos = awbs_unicos
+
+        # Atualiza contadores
+        self._uncleared_lbl_count_input.configure(
+            text=f"{len(awbs_todos)} AWBs lidos")
+        self._uncleared_lbl_count_result.configure(
+            text=f"{len(awbs_unicos)} unicos ({duplicados} duplicados removidos)")
+
+        # Mostra resultado
+        self._uncleared_result_text.delete("1.0", tk.END)
+        self._uncleared_result_text.insert("1.0", "\n".join(awbs_unicos))
+
+        self._log(f"Uncleared: {len(awbs_todos)} -> {len(awbs_unicos)} AWBs "
+                  f"({duplicados} duplicados removidos)")
+
+    def _uncleared_limpar_input(self):
+        """Limpa o campo de input."""
+        self._uncleared_input_text.delete("1.0", tk.END)
+        self._uncleared_result_text.delete("1.0", tk.END)
+        self._uncleared_awbs_limpos = []
+        self._uncleared_lbl_count_input.configure(text="0 AWBs")
+        self._uncleared_lbl_count_result.configure(text="")
+
+    def _uncleared_importar_planilha(self):
+        """Abre dialogo para importar planilha do sistema."""
+        from tkinter import filedialog
+
+        caminho = filedialog.askopenfilename(
+            title="Selecionar planilha de AWBs",
+            filetypes=[
+                ("Planilhas", "*.xlsx *.xls *.csv"),
+                ("Excel", "*.xlsx *.xls"),
+                ("CSV", "*.csv"),
+            ]
+        )
+
+        if not caminho:
+            return
+
+        try:
+            awbs_planilha, df_filtrado = carregar_planilha_sistema(
+                caminho, base_posse="MCZ", retira_entrega="RETIRA")
+
+            self._uncleared_awbs_planilha = awbs_planilha
+            self._uncleared_arquivo_planilha = caminho
+
+            nome_arquivo = os.path.basename(caminho)
+            self._uncleared_lbl_planilha.configure(
+                text=f"{nome_arquivo} ({len(awbs_planilha)} AWBs)",
+                text_color="#22c55e")
+
+            self._log(f"Uncleared: Planilha carregada - {nome_arquivo} "
+                      f"({len(awbs_planilha)} AWBs MCZ/RETIRA)")
+
+        except Exception as e:
+            messagebox.showerror("Erro", f"Erro ao carregar planilha:\n{str(e)}")
+            self._log(f"Uncleared: ERRO ao carregar planilha - {e}")
+
+    def _uncleared_comparar(self):
+        """Compara AWBs limpos com a planilha importada."""
+        if not self._uncleared_awbs_limpos:
+            messagebox.showwarning("Aviso",
+                "Primeiro limpe os AWBs (botao 'Limpar e deduplicar').")
+            return
+
+        if not self._uncleared_awbs_planilha:
+            messagebox.showwarning("Aviso",
+                "Importe a planilha do sistema primeiro.")
+            return
+
+        resultado = comparar_awbs(self._uncleared_awbs_limpos, self._uncleared_awbs_planilha)
+        self._uncleared_resultado_comparacao = resultado
+
+        # Mostra resultado na caixa de texto
+        self._uncleared_result_text.delete("1.0", tk.END)
+
+        linhas = []
+        linhas.append(f"=== COMPARACAO ===")
+        linhas.append(f"Meus AWBs: {resultado['total_meus']}")
+        linhas.append(f"Planilha (MCZ/RETIRA): {resultado['total_planilha']}")
+        linhas.append(f"")
+        linhas.append(f"--- PRESENTES nas duas listas ({resultado['total_presentes']}) ---")
+        for awb in resultado["presentes"]:
+            linhas.append(f"  {awb}")
+        linhas.append(f"")
+        linhas.append(f"--- AUSENTES na planilha ({resultado['total_ausentes']}) ---")
+        for awb in resultado["ausentes"]:
+            linhas.append(f"  {awb}")
+
+        self._uncleared_result_text.insert("1.0", "\n".join(linhas))
+
+        # Atualiza label
+        self._uncleared_lbl_count_result.configure(
+            text=f"{resultado['total_presentes']} presentes | "
+                 f"{resultado['total_ausentes']} ausentes")
+
+        self._log(f"Uncleared: Comparacao - {resultado['total_presentes']} presentes, "
+                  f"{resultado['total_ausentes']} ausentes")
+
+    def _uncleared_copiar_resultado(self):
+        """Copia o conteudo do resultado para a area de transferencia."""
+        texto = self._uncleared_result_text.get("1.0", tk.END).strip()
+        if not texto:
+            messagebox.showinfo("Info", "Nada para copiar. Processe os AWBs primeiro.")
+            return
+
+        self.janela.clipboard_clear()
+        self.janela.clipboard_append(texto)
+        self._log("Uncleared: Resultado copiado para area de transferencia")
+
+    def _uncleared_salvar_xlsx(self):
+        """Salva lista de AWBs limpos em .xlsx."""
+        from tkinter import filedialog
+
+        if not self._uncleared_awbs_limpos:
+            messagebox.showwarning("Aviso", "Nenhum AWB processado para salvar.")
+            return
+
+        caminho = filedialog.asksaveasfilename(
+            title="Salvar AWBs limpos",
+            defaultextension=".xlsx",
+            filetypes=[("Excel", "*.xlsx"), ("CSV", "*.csv"), ("Texto", "*.txt")],
+            initialfile=f"awbs_limpos_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        )
+
+        if not caminho:
+            return
+
+        try:
+            ext = os.path.splitext(caminho)[1].lower()
+            if ext == ".csv":
+                salvar_resultado(self._uncleared_awbs_limpos, caminho, formato="csv")
+            elif ext == ".txt":
+                salvar_resultado(self._uncleared_awbs_limpos, caminho, formato="txt")
+            else:
+                salvar_resultado(self._uncleared_awbs_limpos, caminho, formato="xlsx")
+
+            self._log(f"Uncleared: AWBs salvos em {os.path.basename(caminho)}")
+            messagebox.showinfo("Salvo", f"AWBs salvos em:\n{caminho}")
+
+        except Exception as e:
+            messagebox.showerror("Erro", f"Erro ao salvar:\n{str(e)}")
+
+    def _uncleared_salvar_comparacao(self):
+        """Salva resultado da comparacao em .xlsx (duas abas: Presentes e Ausentes)."""
+        from tkinter import filedialog
+
+        if not self._uncleared_resultado_comparacao:
+            messagebox.showwarning("Aviso", "Faca a comparacao primeiro.")
+            return
+
+        caminho = filedialog.asksaveasfilename(
+            title="Salvar comparacao",
+            defaultextension=".xlsx",
+            filetypes=[("Excel", "*.xlsx")],
+            initialfile=f"comparacao_awbs_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        )
+
+        if not caminho:
+            return
+
+        try:
+            salvar_comparacao(self._uncleared_resultado_comparacao, caminho)
+            self._log(f"Uncleared: Comparacao salva em {os.path.basename(caminho)}")
+            messagebox.showinfo("Salvo", f"Comparacao salva em:\n{caminho}")
+
+        except Exception as e:
+            messagebox.showerror("Erro", f"Erro ao salvar:\n{str(e)}")
 
     def _log(self, mensagem: str):
         """Adiciona mensagem ao log visual (thread-safe)."""
