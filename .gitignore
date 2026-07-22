@@ -1,0 +1,40 @@
+# === Credenciais e dados sensiveis ===
+credenciais.json
+*.env
+.env
+.env.*
+
+# === Logs ===
+logs/
+*.log
+
+# === Python ===
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+*.spec
+venv/
+.venv/
+
+# === Perfil Chrome (sessao Outlook) ===
+outlook_profile/
+chrome_profile/
+
+# === IDE ===
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# === OS ===
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# === Downloads temporarios ===
+downloads/
+*.pdf
