@@ -125,7 +125,7 @@ class NexlogLiberar:
                 logger.debug(f"Clique por texto falhou: {e}")
 
         if clicou:
-            pausa(5)
+            pausa(4)
             logger.info("Filtros configurados: data 01 + status Retida")
         else:
             logger.error("Nao conseguiu clicar em Pesquisar na tela de retencao")
@@ -305,7 +305,7 @@ class NexlogLiberar:
                 ))
             )
             botao_liberar.click()
-            pausa(4)
+            pausa(3)
 
             # 2. Aguarda modal "Liberar retencao" abrir
             self.wait.until(
@@ -327,7 +327,7 @@ class NexlogLiberar:
                 ))
             )
             botao_liberado.click()
-            pausa(5)
+            pausa(4)
 
             logger.info("Liberacao confirmada com sucesso!")
             return True
@@ -370,7 +370,7 @@ class NexlogLiberar:
                     "//*[@id='searchButton'] | //button[contains(.,'Pesquisar')]"
                 )
                 botao.click()
-                pausa(5)
+                pausa(4)
             except Exception:
                 pass
 

@@ -17,6 +17,7 @@ Fluxo completo:
 import os
 import sys
 import time
+import json
 import logging
 import threading
 import tkinter as tk
@@ -54,7 +55,7 @@ from modules.uncleared import limpar_awbs, carregar_planilha_sistema, comparar_a
 
 # Modo teste: envia pra este email em vez das bases reais
 EMAIL_TESTE_DOMICILIO = "gmmiqoption@gmail.com"
-MODO_TESTE_EMAIL = True  # Mude pra False pra enviar pras bases reais
+MODO_TESTE_EMAIL = False  # Mude pra True pra enviar pro email de teste
 
 
 def _montar_emails_base(sigla_base: str) -> list:
@@ -308,6 +309,48 @@ ETAPAS_VOO = [
     "Adicionando comentarios",
     "Liberando AWBs",
 ]
+
+
+# ========= REGISTRO DE MANIFESTOS JA ENVIADOS (persiste entre sessoes) =========
+ARQUIVO_SEFAZ_ENVIADOS = PASTA_CONFIG / "sefaz_enviados.json"
+
+
+def _carregar_voos_enviados_hoje() -> set:
+    """Carrega lista de voos ja enviados pra SEFAZ no dia de hoje."""
+    hoje = datetime.now().strftime("%Y-%m-%d")
+    try:
+        if ARQUIVO_SEFAZ_ENVIADOS.exists():
+            with open(ARQUIVO_SEFAZ_ENVIADOS, "r", encoding="utf-8") as f:
+                dados = json.load(f)
+            return set(dados.get(hoje, []))
+    except (json.JSONDecodeError, Exception):
+        pass
+    return set()
+
+
+def _registrar_voo_enviado(numero_controle: str):
+    """Registra um voo como enviado no dia de hoje."""
+    hoje = datetime.now().strftime("%Y-%m-%d")
+    dados = {}
+    try:
+        if ARQUIVO_SEFAZ_ENVIADOS.exists():
+            with open(ARQUIVO_SEFAZ_ENVIADOS, "r", encoding="utf-8") as f:
+                dados = json.load(f)
+    except (json.JSONDecodeError, Exception):
+        dados = {}
+
+    if hoje not in dados:
+        dados[hoje] = []
+    if numero_controle not in dados[hoje]:
+        dados[hoje].append(numero_controle)
+
+    # Limpa dias antigos (mantem so ultimos 7 dias)
+    from datetime import timedelta
+    limite = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+    dados = {k: v for k, v in dados.items() if k >= limite}
+
+    with open(ARQUIVO_SEFAZ_ENVIADOS, "w", encoding="utf-8") as f:
+        json.dump(dados, f, indent=2, ensure_ascii=False)
 
 
 class AppAutomacao:
@@ -1124,19 +1167,29 @@ class AppAutomacao:
         self._sefaz_voos = voos
         self._sefaz_checkboxes = []
 
+        # Carrega voos ja enviados hoje
+        enviados_hoje = _carregar_voos_enviados_hoje()
+
         for i, voo in enumerate(voos):
-            var = tk.BooleanVar(value=True)  # Marcado por padrao
+            ja_enviado = voo.numero_controle in enviados_hoje
+            var = tk.BooleanVar(value=not ja_enviado)  # Desmarcado se ja enviou
             self._sefaz_checkboxes.append(var)
 
             texto = f"{voo.numero_controle}  |  {voo.etapas}  |  {voo.data_chegada}"
+            if ja_enviado:
+                texto += "  [JA ENVIADO]"
+
             chk = ctk.CTkCheckBox(
                 self.sefaz_frame_voos, text=texto, variable=var,
                 font=ctk.CTkFont(family="Consolas", size=11),
-                text_color="#e5e7eb"
+                text_color="#6b7280" if ja_enviado else "#e5e7eb"
             )
             chk.pack(anchor="w", pady=2, padx=4)
 
-        self.sefaz_lbl_voos.configure(text=f"Voos encontrados: {len(voos)}")
+        total_novos = len(voos) - len([v for v in voos if v.numero_controle in enviados_hoje])
+        self.sefaz_lbl_voos.configure(
+            text=f"Voos encontrados: {len(voos)} ({total_novos} novo(s))"
+        )
 
     def _sefaz_obter_voos_selecionados(self):
         """Retorna lista de voos com checkbox marcado."""
@@ -1266,7 +1319,7 @@ class AppAutomacao:
             data_ini = self.sefaz_data_ini.get().strip()
             data_fim = self.sefaz_data_fim.get().strip()
             voos_mod.pesquisar_voos(data_ini, data_fim)
-            pausa(3)  # DataTables precisa de tempo pra renderizar completamente
+            pausa(2)  # DataTables precisa de tempo pra renderizar completamente
 
             for i, voo in enumerate(voos):
                 self._sefaz_log(f"\n--- Voo {i+1}/{total}: {voo.numero_controle} ({voo.etapas}) ---")
@@ -1317,6 +1370,7 @@ class AppAutomacao:
                     if sucesso:
                         self._sefaz_log(f"Email enviado com sucesso!")
                         enviados += 1
+                        _registrar_voo_enviado(voo.numero_controle)
                     else:
                         self._sefaz_log(f"ERRO: Falha ao enviar email para {voo.numero_controle}")
                         erros += 1

@@ -52,7 +52,7 @@ class NexlogCTeOperacoes:
             if "TransportOrder" not in url_atual:
                 # Nao estamos na pagina — navega
                 self.browser.navegar_vendas_conhecimento_lista()
-                pausa(3)
+                pausa(1)
 
             # SEMPRE clica na aba "Por referencia" (pode estar em outra aba)
             try:
@@ -100,7 +100,7 @@ class NexlogCTeOperacoes:
                 ))
             )
             botao_pesquisar.click()
-            pausa(4)
+            pausa(3)
 
             # Le o AWB da coluna "N. documento" na tabela de resultados
             awb = self._ler_awb_resultado()
@@ -358,7 +358,7 @@ class NexlogCTeOperacoes:
         try:
             # 1. Busca rapida pelo AWB
             self.browser.busca_rapida(awb)
-            pausa(3)
+            pausa(2)
 
             # 2. Clica em "Adicionar comentarios" (link no canto superior direito)
             link_comentario = self.wait.until(
@@ -368,7 +368,7 @@ class NexlogCTeOperacoes:
                 ))
             )
             link_comentario.click()
-            pausa(3)
+            pausa(2)
 
             # 3. Localiza o campo de texto "Comentario"
             campo_comentario = self.wait.until(

@@ -135,7 +135,7 @@ class NexlogBrowser:
             raise ValueError("Credenciais do Nexlog nao configuradas.")
 
         self.driver.get(config.url_nexlog)
-        pausa(3)
+        pausa(2)
 
         # Usuario
         campo_user = self.wait.until(
@@ -166,7 +166,7 @@ class NexlogBrowser:
         # Tratar mensagem de sessao ativa
         self._tratar_sessao_ativa()
 
-        pausa(4)
+        pausa(3)
         self._logado = True
         logger.info(f"Login Nexlog realizado - base: {base}")
 
@@ -206,7 +206,7 @@ class NexlogBrowser:
             EC.element_to_be_clickable((By.ID, "quickTracking-icon"))
         )
         botao.click()
-        pausa(3)
+        pausa(2)
 
     def _fechar_modais(self):
         """Fecha qualquer modal aberto que possa bloquear a interacao."""
@@ -271,7 +271,7 @@ class NexlogBrowser:
             logger.debug("Ja esta em TransportOrder - nao recarrega")
         else:
             self.driver.get(url_destino)
-            pausa(4)
+            pausa(3)
 
         logger.info("Nexlog: Na pagina de Conhecimento/Lista")
 
@@ -295,7 +295,7 @@ class NexlogBrowser:
             logger.debug("Ja esta em Retention - nao recarrega")
         else:
             self.driver.get(url)
-            pausa(4)
+            pausa(3)
 
         logger.info("Nexlog: Na pagina de Retencoes")
 

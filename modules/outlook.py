@@ -978,7 +978,7 @@ class OutlookWeb:
                 ))
             )
             btn_novo.click()
-            pausa(4)
+            pausa(3)
 
             logger.debug("Outlook envio: Formulario de composicao aberto")
 

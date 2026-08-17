@@ -81,7 +81,7 @@ class NexlogVoos:
             ))
         )
         botao_pesquisar.click()
-        pausa(5)
+        pausa(3)
 
         # Extrai voos da tabela
         voos = self._extrair_voos_tabela()
@@ -180,7 +180,7 @@ class NexlogVoos:
                         f"window.Controllers.ReceivingController.ViewMDFe({id_rota});"
                     )
                     logger.info(f"Chamou ViewMDFe({id_rota}) via JS (sem dropdown)")
-                    pausa(2)  # JS abre modal quase instantaneo
+                    pausa(1)  # JS abre modal quase instantaneo
 
                     chave = self._ler_chave_modal()
                     self._fechar_modal_integracao()
@@ -227,7 +227,7 @@ class NexlogVoos:
                 self._fechar_dropdown()
                 return ""
 
-            pausa(5)
+            pausa(2)
 
             # Le a chave da tabela no modal
             chave = self._ler_chave_modal()
@@ -669,7 +669,7 @@ class NexlogVoos:
                         "//button[contains(.,'Pesquisar')] | //button[contains(@id,'search')]"
                     )
                     botao_pesquisar.click()
-                    pausa(5)
+                    pausa(3)
                 except Exception:
                     pass
                 linha = self._encontrar_linha_voo(voo.numero_controle, voo.data_chegada)
@@ -714,7 +714,7 @@ class NexlogVoos:
                     logger.error(f"DAMDFE: Nao abriu modal MDFe para {voo.numero_controle}")
                     self._fechar_dropdown()
                     return ("", "")
-                pausa(5)
+                pausa(2)
                 modal_aberto = True
 
             # === Le a chave do modal ===
